@@ -9,17 +9,26 @@
 
 每条记录的 source.note 带「作者v1 slug 待实体化」打标（docs/data-confidence.md）。
 
-## v2 路线（M3+ 评估，未开工）
+## v2 产物（2026-09-09 交付，spec FR-212）
 
-chinese-poetry 源自带作者元数据，可支撑实体化：
-- `全唐诗/authors.tang.json`：name + desc（繁体小传）+ uuid —— 3,675 条
-- `宋词/author.song.json`：name + description + short_description —— 1,563 条
+- `docs/authors-index-2026-09-09.jsonl`：5,153 条 **（语料域, slug）独立实体**
+  （qts 3,663 + songci 1,490，不做跨域合并——跨域同 slug 可能是不同人，
+  如 qts 唐诗人李虞 与 songci 李玉 均 liyu/liyu? 见下方同名风险）。
+  字段：key(domain:slug) · domain · slug · name · dynasty{declared, refined} ·
+  count · uncertain。
+- refine 信号（按可靠度排序）：南宋字样 → nansong；北宋字样 → beisong；
+  生卒年份（>=960 起）→ 朝代；生于 <960 → wudai 边界；五代人物归属词
+  （南唐后主/五代词人/后蜀/前蜀/吴越王/花间词人）→ wudai；
+  **其余一律不判，uncertain=true 打标**（评语中「晚唐五代词风/南唐词风」泛滥，
+  是自动判定的主要噪声源，v2 选择保守打标而非误判）。
+- 抽校：`docs/review-sample-authors-2026-09-09.tsv`（edge + 随机共约 50 行）。
+- 数据源：全唐诗 authors.tang.json（繁体小传，qts 域不 refine——域声明 tang 已准）；
+  宋词 author.song.json（1,563 条 description 多为作品列表，年份可解析者仅少数）。
 
-v2 实体表方向（ADR 预留，涉及 schema 或独立索引文件）：
-1. 以源 uuid/description 锚定人名（拆别名/帝王本名如 太宗皇帝→李世民）；
-2. 跨集合并（如 qts 李白 与 songci 苏轼 各自独立，无跨集冲突，但同人跨集如 李白词/诗
-   chinese-poetry 未收录则无虞）；
-3. 同名消歧需人工/半自动（描述中生卒/籍贯）；
-4. 产出作者索引文件（可选实体化替代内嵌快照，M0 ADR 预留）。
+## v3 路线（未开工，ADR 预留）
+
+1. 跨域同名消歧合并（v2 保持 domain:slug 独立即为此留的边界）；
+2. 别名/帝王本名归一（太宗皇帝→李世民）——需人工或半自动实体表；
+3. 以 source uuid 锚定并替换 Poem.author 快照 id 属**破坏性演进**，另行 ADR。
 
 贡献：校勘一条作者归属 = 数据仓 data PR；修订后移除对应打标。

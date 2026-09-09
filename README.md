@@ -68,3 +68,4 @@ cargo run -q -p tianquan --bin tianquan-check -- ../wenshuge-data/tang/300-poems
 - 抽校：`docs/review-sample-songci-2026-09-09.tsv`（25 首 固定种子）。
 - 复现：`python3 scripts/convert_ci.py raw/chinese-poetry songci`。
 - 数据出处：chinese-poetry（MIT），转换后语料按 CC BY-SA 4.0 共享并保留源署名。
+- 作者实体索引 v2：`scripts/build_author_index.py` → `docs/authors-index-2026-09-09.jsonl`（详见 docs/author-notes.md）
