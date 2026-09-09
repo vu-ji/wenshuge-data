@@ -38,3 +38,15 @@ cargo run -q -p tianquan --bin tianquan-check -- ../wenshuge-data/tang/300-poems
 
 - 语料：CC BY-SA 4.0（见 LICENSE）
 - 工具脚本：MIT（随主仓开源约定）
+
+## 全唐诗全集（qts，M3a R2）
+
+- `qts/qts-001..042.jsonl`：57,435 首（chinese-poetry 全唐诗源，跳过 172 条缺字段），
+  id `qts-{8位base36}`（语料域 qts → dynasty tang，spec FR-301b）；42 片每片 ≤931KB。
+- 简体 = OpenCC t2s 机转；form 仅低置信推断（basis 记 source.note），21,050 首不可判定为 null；
+  tags 留空；作者 v1 = 拼音 slug（冲突确定性去重），待实体化（作者简介存于源 authors.tang.json）。
+- 抽校：`docs/review-sample-qts-2026-09-09.tsv`（40 首 固定种子）——人工核对中（open）。
+- 复现：`git submodule update --init --depth 1 raw/chinese-poetry` 后
+  `python3 scripts/convert_quan_tang_shi.py raw/chinese-poetry qts`。
+- 数据出处：chinese-poetry（MIT，https://github.com/chinese-poetry/chinese-poetry），
+  转换后语料按 CC BY-SA 4.0 共享并保留源署名。
