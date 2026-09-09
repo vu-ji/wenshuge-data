@@ -45,7 +45,8 @@ cargo run -q -p tianquan --bin tianquan-check -- ../wenshuge-data/tang/300-poems
   id `qts-{8位base36}`（语料域 qts → dynasty tang，spec FR-301b）；42 片每片 ≤931KB。
 - 简体 = OpenCC t2s 机转；form 仅低置信推断（basis 记 source.note），21,050 首不可判定为 null；
   tags 留空；作者 v1 = 拼音 slug（冲突确定性去重），待实体化（作者简介存于源 authors.tang.json）。
-- 抽校：`docs/review-sample-qts-2026-09-09.tsv`（40 首 固定种子）——人工核对中（open）。
+- 抽校：`docs/review-sample-qts-2026-09-09.tsv`（40 首 固定种子）——**2026-09-09 用户初核通过**；
+  不确定数据打标约定见 `docs/data-confidence.md`（后续人工核对以 data PR 修订并移除标记）。
 - 复现：`git submodule update --init --depth 1 raw/chinese-poetry` 后
   `python3 scripts/convert_quan_tang_shi.py raw/chinese-poetry qts`。
 - 数据出处：chinese-poetry（MIT，https://github.com/chinese-poetry/chinese-poetry），
