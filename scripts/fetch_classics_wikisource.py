@@ -3,12 +3,14 @@
 """文枢阁 · 典籍 ETL：维基文库 → 篇级 JSONL（spec.md M4a FR-502）。
 
 - 底本：zh.wikisource（CC BY-SA 4.0，与语料仓同许可，可并入并署名）；
-  edition 记录「zh.wikisource · <条目> · <日期>」。
-- 清洗规则（保守、可复核）：取 <onlyinclude> 正文；按 <div …>'''编号'''</div>
-  分段，每段 = 一章；段内去 ref/标签/加粗/链接，内联校勘模板 {{另2|A|…}} 取主读 A，
-  其余 {{…}} 删除（仅内部模板）；HTML 实体反转义。每章文本合并为一段（原书换行不入库）。
-- 输出：每篇一个文件（分片 ≤1MB、diff 友好），id = {work}-{8位 base36}（配置序 = id 序）。
-- 校验：`tianquan-check --classic <out>/*.jsonl`。
+  edition 记录「zh.wikisource · <条目> · <抓取日>」。
+- lunyu：<onlyinclude> 内按 <div>'''编号'''</div> 分段（每段一章）。
+- shiji：卷页正文（header 模板后），段间空行分隔，==小节== 标题跳过。
+- 通用清洗：去 ref/标签/加粗/链接（留展示文本）；-{A}- 取默认 A；
+  {{YL|x}} 取 x（纪元）；lunyu 另2 校勘取主读；其余 {{…}} 移除；
+  段尾 ===注记=== 小节截断（lunyu）。每段文本合并单行（原书折行不入库）。
+- 输出：每篇一文件（分片 ≤1MB、diff 友好），id = {work}-{8位 base36}（配置序）。
+- 校验：`tianquan-check --classic <dir>/*.jsonl`。
 
 用法：python3 fetch_classics_wikisource.py --work lunyu|shiji
 """
@@ -24,7 +26,6 @@ import urllib.request
 
 UA = "wenshuge-data/etl (cc-by-sa 4.0 corpus builder)"
 
-# (wiki 条目, 输出篇名[简体], 书名)。条目用传统字形（wiki 底本）。
 LUNYU = [
     ("論語/學而第一", "学而", "论语"),
     ("論語/爲政第二", "为政", "论语"),
@@ -48,7 +49,16 @@ LUNYU = [
     ("論語/堯曰第二十", "尧曰", "论语"),
 ]
 
-SHIJI = []  # 史记选：后续补齐 (卷条目, 输出篇名[简体], 书名)
+SHIJI = [
+    ("史記/卷001", "五帝本纪", "史记"),
+    ("史記/卷006", "秦始皇本纪", "史记"),
+    ("史記/卷007", "项羽本纪", "史记"),
+    ("史記/卷008", "高祖本纪", "史记"),
+    ("史記/卷047", "孔子世家", "史记"),
+    ("史記/卷081", "廉颇蔺相如列传", "史记"),
+    ("史記/卷084", "屈原贾生列传", "史记"),
+    ("史記/卷109", "李将军列传", "史记"),
+]
 
 RAW_BASE = "https://zh.wikisource.org/wiki/{}?action=raw"
 
@@ -60,36 +70,54 @@ def fetch(page: str) -> str:
         return resp.read().decode("utf-8")
 
 
-def _strip_markup(seg: str) -> str:
-    # 1) 结构标签与 ref
+def _variant_default(inner: str) -> str:
+    """-{…}- 变体选默认阅读：zh-hant 段 > zh 段 > 首个非空无冒号段。"""
+    parts = inner.split(";")
+    for x in parts:
+        if x.startswith("zh-hant:"):
+            return x[len("zh-hant:"):]
+    for x in parts:
+        if x.startswith("zh:"):
+            return x[len("zh:"):]
+    for x in parts:
+        if ":" not in x and x:
+            return x
+    return ""
+
+
+def clean_seg(seg: str, lunyu: bool) -> str:
     seg = re.sub(r"<ref[^>]*>.*?</ref>", "", seg, flags=re.S)
     seg = re.sub(r"<[^>]+>", "", seg)
-    # 2) 链接只留展示文本、去加粗
     seg = re.sub(r"\[\[[^\]|]*\|([^\]]*)\]\]", r"\1", seg)
     seg = re.sub(r"\[\[([^\]|]*)\]\]", r"\1", seg)
     seg = seg.replace("'''", "")
-    # 3) 变体字 -{A}- 取默认 A
-    seg = re.sub(r"-\{([^{}]*)\}-", r"\1", seg)
-    # 4) 内联校勘 {{另N|主读|异文}}：取「首个 | 之前」为主读（异文整体丢弃，保守可复核）
-    def pick_primary(m):
-        inner = m.group(1)
-        left = inner.split("|", 1)[0]
-        return left
-
-    seg = re.sub(r"\{\{\s*另[12]\s*\|(.*?)\}\}", pick_primary, seg, flags=re.S)
-    # 5) 其余模板（仅内部、无内容保留）直接移除
+    # 管道/变体选项模板：{{!|A|B}}（hans 选项，繁体底本取默认故删除）、{{!}} 即 '|'
+    seg = re.sub(r"\{\{\s*!\s*\|[^{}]*\}\}", "", seg)
+    seg = seg.replace("{{!}}", "|")
+    # 变体字：-{…}- 取默认阅读；纪元/专名/校字模板取参文本
+    seg = re.sub(r"-\{([^{}]*)\}-", lambda m: _variant_default(m.group(1)), seg)
+    seg = re.sub(r"\{\{\s*(?:YL|專|標|書)\s*\|([^|}]+)(?:\|[^{}]*)?\}\}", r"\1", seg)
+    if lunyu:
+        # 内联校勘 {{另|A|B}} / {{另2|A|B…}}：取首个 | 之前为主读（须先于通用模板移除）
+        seg = re.sub(
+            r"\{\{\s*另[12]?\s*\|(.*?)\}\}",
+            lambda m: m.group(1).split("|", 1)[0],
+            seg,
+            flags=re.S,
+        )
     seg = re.sub(r"\{\{[^{}]*\}\}", "", seg)
     seg = html.unescape(seg)
     seg = " ".join(ln.strip() for ln in seg.splitlines() if ln.strip())
-    # 6) 截断段尾校勘/注记小节（===…=== / ==…== 首次出现即截断）
-    m = re.search(r"\s*={2,}[^=]*={2,}", seg)
-    if m:
-        seg = seg[: m.start()].rstrip()
+    for tok in ("{{{{", "}}}}", "__FORCETOC__", "__NOEDITSECTION__"):
+        seg = seg.replace(tok, "")
+    if lunyu:
+        m = re.search(r"\s*={2,}[^=]*={2,}", seg)
+        if m:
+            seg = seg[: m.start()].rstrip()
     return seg
 
 
-def clean_verses(raw: str):
-    """截取 onlyinclude 正文，按编号 div 分段 → 每段一章。返回 (段列表, marker 数)。"""
+def clean_lunyu(raw: str):
     s = raw
     if "<onlyinclude>" in s:
         s = s.split("<onlyinclude>", 1)[1]
@@ -99,8 +127,49 @@ def clean_verses(raw: str):
     parts = []
     for i, m in enumerate(markers):
         end = markers[i + 1].start() if i + 1 < len(markers) else len(s)
-        parts.append(_strip_markup(s[m.end():end]))
+        parts.append(clean_seg(s[m.end():end], True))
     return [p for p in parts if p], len(markers)
+
+
+def clean_shiji(raw: str):
+    s = raw
+    if "\n}}\n" in s:
+        s = s.split("\n}}\n", 1)[1]
+    if "<onlyinclude>" in s:
+        s = s.split("<onlyinclude>", 1)[1]
+        s = s.split("</onlyinclude>", 1)[0]
+    paras = []
+    cur = ""
+    drain = False
+    for ln in s.splitlines():
+        st = ln.strip()
+        if st.startswith("__"):  # 魔字行单行跳过
+            continue
+        if st.startswith("{{"):
+            if st.endswith("}}"):  # 整行模板（wikipedia/注意/…）跳过
+                continue
+            if st[2:].lstrip().startswith(("*", "footer", "refbegin", "refend", "注意")):
+                drain = True  # 已知多行 wrapper（{{*| 注释块等）排水
+        if drain:
+            if "}}" in ln:
+                drain = False
+            continue
+        ln = clean_seg(ln, False).strip()
+        if not ln or ln.startswith("="):
+            if cur:
+                paras.append(cur)
+                cur = ""
+            continue
+        if cur and not cur[-1] in "。？！…”」；：":
+            cur += ln
+        elif cur:
+            paras.append(cur)
+            cur = ln
+        else:
+            cur = ln
+    if cur:
+        paras.append(cur)
+    return [p for p in paras if p], len(paras)
 
 
 def base36(n: int) -> str:
@@ -115,11 +184,18 @@ def base36(n: int) -> str:
 def build(work: str, meta, out_dir: str, today: str) -> int:
     os.makedirs(out_dir, exist_ok=True)
     ok = 0
+    part = "jing" if work == "lunyu" else "shi"
+    genre = "四书五经" if work == "lunyu" else "史实传记"
+    note = (
+        "维基文库通行底本（繁体）；内联校勘取主读、标记已剥离"
+        if work == "lunyu"
+        else "维基文库底本（繁体）；纪元取年份、标记已剥离；正文按空行分段"
+    )
     for idx, (page, title, book) in enumerate(meta, start=1):
         raw = fetch(page)
-        verses, markers = clean_verses(raw)
-        if len(verses) != markers or not verses:
-            print(f"  !! {page}: verses {len(verses)} != markers {markers} -> SKIP", file=sys.stderr)
+        paras, _ = clean_lunyu(raw) if work == "lunyu" else clean_shiji(raw)
+        if not paras:
+            print(f"  !! {page}: empty body -> SKIP", file=sys.stderr)
             continue
         cid = f"{work}-{base36(idx)}"
         rec = {
@@ -127,18 +203,15 @@ def build(work: str, meta, out_dir: str, today: str) -> int:
             "work_id": work,
             "work_title": book,
             "title": title,
-            "part": "jing" if work == "lunyu" else "shi",
-            "genre": "四书五经" if work == "lunyu" else "史实传记",
-            "paragraphs": verses,
-            "source": {
-                "edition": f"zh.wikisource · {page} · {today}",
-                "note": "维基文库通行底本（繁体）；内联校勘取主读、标记已剥离",
-            },
+            "part": part,
+            "genre": genre,
+            "paragraphs": paras,
+            "source": {"edition": f"zh.wikisource · {page} · {today}", "note": note},
         }
         fn = os.path.join(out_dir, f"{work}-{idx:02d}-{title}.jsonl")
         with open(fn, "w", encoding="utf-8") as f:
             f.write(json.dumps(rec, ensure_ascii=False) + "\n")
-        print(f"  {cid} {book}·{title}: {len(verses)} 章")
+        print(f"  {cid} {book}·{title}: {len(paras)} 段")
         ok += 1
     return ok
 
@@ -148,12 +221,9 @@ def main():
     ap.add_argument("--work", choices=["lunyu", "shiji"], required=True)
     ap.add_argument("--out", default=None)
     args = ap.parse_args()
-    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # 数据仓根
+    repo = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     out_dir = args.out or os.path.join(repo, args.work)
     meta = LUNYU if args.work == "lunyu" else SHIJI
-    if not meta:
-        print("no chapters configured for this work yet", file=sys.stderr)
-        sys.exit(2)
     n = build(args.work, meta, out_dir, "2026-09-09")
     print(f"done: {n} chapters -> {out_dir}")
 
