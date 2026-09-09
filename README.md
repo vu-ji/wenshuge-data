@@ -51,3 +51,14 @@ cargo run -q -p tianquan --bin tianquan-check -- ../wenshuge-data/tang/300-poems
   `python3 scripts/convert_quan_tang_shi.py raw/chinese-poetry qts`。
 - 数据出处：chinese-poetry（MIT，https://github.com/chinese-poetry/chinese-poetry），
   转换后语料按 CC BY-SA 4.0 共享并保留源署名。
+
+## 全宋词全集（songci，M3c）
+
+- `songci/songci-001..018.jsonl`：21,050 首（源 21,053，3 条缺词牌/正文跳过）；
+  id `songci-{8位base36}`（语料域 songci → dynasty song）；18 片每片 ≤928KB。
+- title = 词牌（源无词题，词以词牌为题惯例）；`tune` = 词牌（spec FR-309）；form = null（词非诗体）。
+- 源正文即简体（采样 0 繁体）——无 OpenCC 转换；作者 v1 slug 确定性去重（1,490 位）；
+  作者朝代按全宋词集推断 song（个别五代籍如李煜待实体化 v2，作者小传存 author.song.json）。
+- 抽校：`docs/review-sample-songci-2026-09-09.tsv`（25 首 固定种子）。
+- 复现：`python3 scripts/convert_ci.py raw/chinese-poetry songci`。
+- 数据出处：chinese-poetry（MIT），转换后语料按 CC BY-SA 4.0 共享并保留源署名。
