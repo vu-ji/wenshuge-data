@@ -29,10 +29,16 @@ LICENSE                        语料 CC BY-SA 4.0 全文
 cargo run -q -p tianquan --bin tianquan-check -- ../wenshuge-data/tang/300-poems.jsonl
 ```
 
+## 开阳 ETL 与复现
+
+- `scripts/run_all.sh` 一键重建 qts/songci（2026-09-09 实证与已提交逐字节一致）；
+- 完整重跑手册：`docs/runbook.md`；打标/置信度：`docs/data-confidence.md`；
+- 作者实体化 v1 说明与 v2 路线：`docs/author-notes.md`。
+
 ## 贡献（拾遗式校对）
 
 一首诗的校勘也是一个 PR：语料改动只发生在本仓；主仓通过 submodule 钉住
-提交（升级主仓指针是独立改动）。
+提交（升级主仓指针是独立改动）。修订规则见 docs/data-confidence.md。
 
 ## 许可
 
