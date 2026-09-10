@@ -1,0 +1,4 @@
+# 同名作者归并白名单（spec.md FR-601 批次一）
+# canonical_slug	alias_slug	name	evidence
+hanyu	hanyu2	韩愈	同题重复 4 首（《山石》《石鼓歌》《八月十五夜赠张功曹》《谒衡岳庙遂宿岳寺题门楼》tang/qts 异 id）；diando 韩愈条目唯一（唐 768—824，313 首诗）
+zhangji	zhangji2	张继	同题重复 3 首（《枫桥夜泊》tang/qts、《华清宫》《句》qts 双录）
